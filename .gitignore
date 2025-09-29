@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Data and model artifacts
+/data/
+/models/
+/output/
+
+# Environment files
+.env
+env/
+venv/
+venv.bak/
+
+# OS files
+Thumbs.db
+Desktop.ini
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Data, models, outputs
+/data/
+/models/
+/output/
+
+# Jupyter checkpoints and runtime
+.ipynb_checkpoints/
+*.ipynb_runtime
+
+# Secrets
+.env
+*.key

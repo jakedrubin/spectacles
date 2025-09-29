@@ -1,0 +1,8 @@
+{
+  "FacialSymmetry": 0.12,
+  "GoldenRatioDeviation": 0.05,
+  "EyeSpacingRatio": 0.35,
+  "JawlineWidthRatio": 0.48,
+  "BrowToEyeDistance": 0.22,
+  "LipToNoseDistance": 0.14
+}
