@@ -1,0 +1,25 @@
+name: spectacles-demo
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  # Core ML
+  - numpy
+  - pandas
+  - scikit-learn
+  - joblib
+  # Face analysis
+  - pillow
+  - opencv
+  # Scraping (optional)
+  - requests
+  - beautifulsoup4
+  - lxml
+  - selenium
+  - pip
+  - pip:
+    # These are easier to install via pip
+    - gradio
+    - mediapipe
+    - playwright

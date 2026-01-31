@@ -1,42 +1,102 @@
-# Spectacles project — preprocessing & recommendation helpers
+# Spectacles — Face-to-Frame Recommendation System
 
-This repository contains notebooks and helper scripts to build a face-to-frame recommendation pipeline.
+A face-to-frame recommendation pipeline that analyzes facial features and recommends eyeglass frames that complement your face shape.
 
-Recommended GitHub layout:
+## Features
 
-- Keep the notebooks (`*.ipynb`) in the repo — they are the primary analysis artifacts. Commits should not include `data/`, `models/`, or large outputs — these are ignored by `.gitignore`.
+- **Face Analysis**: Extract facial metrics from photos using MediaPipe Face Mesh
+- **Frame Recommendation**: ML-powered recommendations based on facial features
+- **Web Demo**: Interactive Gradio interface for easy testing
 
-New helper scripts:
+## Project Structure
 
-- `src/preprocess.py` — merge datasets, one-hot encode frame features, save `data/processed_data.csv`, `data/X_columns.json`, `data/frame_catalog.csv`, and `data/scaler.joblib`.
-- `src/recommend.py` — load a saved regression model (joblib) and recommend top-K frames for a new face JSON input.
+```
+├── demo.py                 # Gradio web interface
+├── src/
+│   ├── face_analysis.py    # MediaPipe facial feature extraction
+│   ├── preprocess.py       # Dataset preprocessing and encoding
+│   ├── recommend.py        # Frame recommendation engine
+│   ├── train.py            # Model training script
+│   ├── tryon.py            # Virtual try-on utilities
+│   └── scraper.py          # Data scraping utilities
+├── notebooks/              # Analysis notebooks
+├── data/                   # Processed datasets (gitignored)
+├── models/                 # Trained models (gitignored)
+└── examples/               # Example inputs
+```
 
-How to use
+## Setup
 
-1. Install dependencies:
+### Option 1: Conda (Recommended)
+
+```bash
+conda env create -f environment.yml
+conda activate spectacles-demo
+```
+
+### Option 2: pip
 
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Run preprocessing (requires the CSVs in repository root):
+### Dependencies
+
+- **Core**: numpy, pandas, scikit-learn, joblib
+- **Face Analysis**: mediapipe, opencv-python, pillow
+- **Web Demo**: gradio
+- **Scraping** (optional): requests, beautifulsoup4, lxml, selenium, playwright
+
+## Quick Start
+
+### 1. Preprocess Data
 
 ```bash
 python src/preprocess.py
 ```
 
-3. Train and save your regressor at `models/regressor.joblib` (not provided here). Then call recommendation:
+This creates:
+- `data/processed_data.csv` — merged and encoded dataset
+- `data/X_columns.json` — feature column names
+- `data/frame_catalog.csv` — frame metadata
+- `data/scaler.joblib` — fitted scaler
+
+### 2. Train the Model
 
 ```bash
-python src/train.py     # trains and saves models/regressor.joblib
+python src/train.py
+```
+
+Saves the trained model to `models/regressor.joblib`.
+
+### 3. Run the Web Demo
+
+```bash
+python demo.py
+```
+
+Opens a Gradio interface at http://127.0.0.1:7860 where you can:
+- Upload a face photo
+- View extracted facial features
+- Get top 5 frame recommendations
+
+### 4. Command-Line Recommendation
+
+```bash
 python src/recommend.py --face-json examples/new_face.json --model models/regressor.joblib --top-k 5
 ```
 
-Secrets
-- `old_specs.ipynb` previously contained a hard-coded Clarifai API key; that notebook has been updated to read such keys from the environment. Never commit API keys — store them as environment variables or in a protected secrets manager.
+### 5. Analyze a Face Image
 
-Next steps
-- Optionally add a training script that trains a regressor and saves `models/regressor.joblib`.
-- Add unit tests for landmark parsing and column alignment.
+```bash
+python src/face_analysis.py path/to/face.jpg
+```
 
-Files added by this cleanup: `src/preprocess.py`, `src/recommend.py`, `src/train.py`, `src/tryon.py`, `src/s.py`, `src/scraper.py`, `requirements.txt`, `.gitignore`.
+## Secrets
+
+API keys should never be committed. Store them as environment variables or in a secrets manager.
+
+## Notes
+
+- Notebooks (`*.ipynb`) are kept in the repo as primary analysis artifacts
+- `data/`, `models/`, and large outputs are gitignored

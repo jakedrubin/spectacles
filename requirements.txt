@@ -1,20 +1,20 @@
+# Core ML dependencies
 numpy
 pandas
 scikit-learn
 joblib
+
+# Face analysis
+mediapipe
+opencv-python
+pillow
+
+# Web demo
+gradio
+
+# Scraping (optional)
 requests
 beautifulsoup4
 lxml
 selenium
 playwright
-torch
-numpy
-pandas
-scikit-learn
-joblib
-requests
-beautifulsoup4
-lxml
-selenium
-playwright
-torch
