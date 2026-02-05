@@ -8,7 +8,7 @@ import gradio as gr
 from pathlib import Path
 import pandas as pd
 from src.face_analysis import extract_face_features
-from src.recommend import recommend
+from src.my_recommend import recommend
 
 
 def recommendation_pipeline(image):
