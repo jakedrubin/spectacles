@@ -8,7 +8,7 @@ import gradio as gr
 from pathlib import Path
 import pandas as pd
 from src.face_analysis import extract_face_features
-from src.my_recommend import recommend
+from src.gemini_recommend import recommend
 
 
 def recommendation_pipeline(image):
@@ -49,12 +49,13 @@ def recommendation_pipeline(image):
             analysis_text += f"- **{readable_key}**: {value:.4f}\n"
         
         # Step B: Glasses Recommendation
-        model_path = Path("models/regressor.joblib")
-        if not model_path.exists():
-            return analysis_text, "\n\n❌ **Error: Model not found.** Please ensure `models/regressor.joblib` exists."
+        # model_path = Path("models/regressor.joblib")
+        # if not model_path.exists():
+        #     return analysis_text, "\n\n❌ **Error: Model not found.** Please ensure `models/regressor.joblib` exists."
         
         try:
-            recommendations = recommend(face_features, model_path, top_k=5)
+            # recommendations = recommend(face_features, model_path, top_k=5)
+            recommendations = recommend(temp_path, top_k=5)
             
             # Format recommendations for display
             rec_html = "\n\n### 🕶️ **Top 5 Recommended Frames:**\n\n"
@@ -80,6 +81,10 @@ def recommendation_pipeline(image):
                     rec_html += " | " + " | ".join(details)
                 
                 rec_html += "\n\n"
+
+            # Clean up temporary file
+            if temp_path.exists():
+                temp_path.unlink()
             
             result_text = analysis_text + rec_html
             return result_text, ""
@@ -90,10 +95,6 @@ def recommendation_pipeline(image):
     except Exception as e:
         return f"❌ **Error during processing:** {str(e)}", ""
     
-    finally:
-        # Clean up temporary file
-        if temp_path.exists():
-            temp_path.unlink()
 
 
 def create_demo():
