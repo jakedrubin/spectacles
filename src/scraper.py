@@ -4,6 +4,7 @@ Full-featured web scraper for extracting eyeglass product information from ameri
 This module provides the AmericasBestScraper class which:
 - Discovers product pages by crawling through paginated listing pages
 - Extracts detailed product specifications (brand, gender, frame material, shape, type, SKU, price)
+- Downloads and saves product images to data/frames/{SKU}.jpg
 - Uses multiple extraction strategies (HTML tables, structured lists, data attributes, JSON-LD)
 - Handles errors with retries and exponential backoff
 - Exports scraped data to JSON and CSV formats
@@ -20,7 +21,7 @@ Usage:
         scraper.save_to_csv()
 
 Requirements:
-    pip install requests beautifulsoup4 lxml
+    pip install requests beautifulsoup4 lxml Pillow
 """
 import requests
 from bs4 import BeautifulSoup
@@ -29,7 +30,10 @@ import time
 import csv
 import re
 import os
+from pathlib import Path
 from urllib.parse import urljoin, urlparse
+from PIL import Image
+from io import BytesIO
 import logging
 
 class AmericasBestScraper:
@@ -40,6 +44,10 @@ class AmericasBestScraper:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
         self.glasses_data = []
+        
+        # Create frames directory
+        self.frames_dir = Path(__file__).parent.parent / "data" / "frames"
+        self.frames_dir.mkdir(parents=True, exist_ok=True)
         
         # Set up logging
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -59,6 +67,47 @@ class AmericasBestScraper:
                 else:
                     self.logger.error(f"Failed to fetch {url} after {retries} attempts")
                     return None
+
+    def download_frame_image(self, image_url, sku):
+        """Download and save a frame image using SKU as filename"""
+        try:
+            # Make URL absolute if needed
+            if not image_url.startswith('http'):
+                image_url = urljoin(self.base_url, image_url)
+            
+            # Skip if URL is invalid
+            if not image_url or image_url == self.base_url:
+                self.logger.warning(f"Invalid image URL for SKU {sku}")
+                return None
+            
+            self.logger.info(f"Downloading image for SKU {sku} from {image_url}")
+            response = self.get_page(image_url)
+            if not response:
+                return None
+            
+            # Open image and convert to RGB (handles transparency)
+            img = Image.open(BytesIO(response.content))
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                img = background
+            
+            # Sanitize SKU for filename (remove special characters)
+            safe_sku = re.sub(r'[^\w\-]', '_', sku)
+            
+            # Save with SKU as filename
+            filename = f"{safe_sku}.jpg"
+            filepath = self.frames_dir / filename
+            img.save(filepath, 'JPEG', quality=95)
+            
+            self.logger.info(f"✓ Saved image: {filename}")
+            return str(filepath)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to download image for SKU {sku} from {image_url}: {e}")
+            return None
 
     def find_glasses_pages(self):
         """Find all individual glasses product pages from listing pages"""
@@ -148,8 +197,9 @@ class AmericasBestScraper:
             'frame_material': '',
             'frame_shape': '',
             'frame_type': '',
-            'sku': '',
-            'price': ''
+            'FrameID': '',
+            'price': '',
+            'image_path': ''
         }
         
         # Extract specs information - try multiple approaches
@@ -178,7 +228,58 @@ class AmericasBestScraper:
                 glasses_info['description'] = desc_elem.get_text(strip=True)
                 break
         
+        # Extract and download product image
+        if glasses_info['FrameID']:
+            image_url = self.extract_product_image(soup)
+            if image_url:
+                image_path = self.download_frame_image(image_url, glasses_info['sku'])
+                if image_path:
+                    glasses_info['image_path'] = image_path
+        
         return glasses_info
+
+    def extract_product_image(self, soup):
+        """Extract the main product image URL from the page"""
+        image_url = None
+        
+        # Try multiple selectors for product images
+        image_selectors = [
+            'img.product-image',
+            'img.main-image',
+            '.product-images img',
+            '.primary-image img',
+            '[data-testid="product-image"]',
+            'img[itemprop="image"]',
+            '.product-detail-images img',
+            '.image-gallery img',
+            'img[alt*="glasses"]',
+            'img[alt*="frame"]',
+            '.media img',
+            '.product-media img'
+        ]
+        
+        for selector in image_selectors:
+            img_elem = soup.select_one(selector)
+            if img_elem:
+                # Try different image attributes (lazy loading uses data-src)
+                image_url = (
+                    img_elem.get('src') or 
+                    img_elem.get('data-src') or 
+                    img_elem.get('data-lazy-src') or
+                    img_elem.get('data-original')
+                )
+                if image_url:
+                    # Skip placeholder/loading images
+                    if 'placeholder' not in image_url.lower() and 'loading' not in image_url.lower():
+                        break
+        
+        # If still not found, try og:image meta tag
+        if not image_url:
+            og_image = soup.find('meta', property='og:image')
+            if og_image:
+                image_url = og_image.get('content')
+        
+        return image_url
 
     def extract_specs_from_json_ld(self, soup, glasses_info):
         """Extract specs from JSON-LD structured data"""
@@ -197,8 +298,8 @@ class AmericasBestScraper:
                                 glasses_info['brand'] = brand.get('name', '')
                             else:
                                 glasses_info['brand'] = str(brand)
-                        if not glasses_info['sku'] and data.get('sku'):
-                            glasses_info['sku'] = data['sku']
+                        if not glasses_info['FrameID'] and data.get('FrameID'):
+                            glasses_info['FrameID'] = data['FrameID']
             except json.JSONDecodeError:
                 continue
 
@@ -261,32 +362,31 @@ class AmericasBestScraper:
                 value = value_elem.get_text(strip=True)
                 self.map_spec_value(key, value, glasses_info)
 
-
-        def parse_americas_best_specs(self, container, glasses_info):
-            """Parse Americas Best specific specs format"""
-            # Get all text and look for the pattern
-            text = container.get_text()
-            self.extract_specs_from_text_pattern(text, glasses_info)
+    def parse_americas_best_specs(self, container, glasses_info):
+        """Parse Americas Best specific specs format"""
+        # Get all text and look for the pattern
+        text = container.get_text()
+        self.extract_specs_from_text_pattern(text, glasses_info)
+        
+        # Also look for links that might contain spec values
+        links = container.find_all('a', href=True)
+        for link in links:
+            href = link.get('href')
+            link_text = link.get_text(strip=True)
             
-            # Also look for links that might contain spec values
-            links = container.find_all('a', href=True)
-            for link in links:
-                href = link.get('href')
-                link_text = link.get_text(strip=True)
-                
-                # Brand links typically go to brand pages
-                if '/archer' in href.lower() or 'archer' in link_text.lower():
-                    if not glasses_info['brand']:
-                        glasses_info['brand'] = link_text
-                elif 'women' in href.lower() or 'men' in href.lower():
-                    if not glasses_info['gender']:
-                        glasses_info['gender'] = link_text
-                elif 'plastic' in href.lower() or 'metal' in href.lower():
-                    if not glasses_info['frame_material']:
-                        glasses_info['frame_material'] = link_text
-                elif 'full-rim' in href.lower() or 'rimless' in href.lower():
-                    if not glasses_info['frame_type']:
-                        glasses_info['frame_type'] = link_text
+            # Brand links typically go to brand pages
+            if '/archer' in href.lower() or 'archer' in link_text.lower():
+                if not glasses_info['brand']:
+                    glasses_info['brand'] = link_text
+            elif 'women' in href.lower() or 'men' in href.lower():
+                if not glasses_info['gender']:
+                    glasses_info['gender'] = link_text
+            elif 'plastic' in href.lower() or 'metal' in href.lower():
+                if not glasses_info['frame_material']:
+                    glasses_info['frame_material'] = link_text
+            elif 'full-rim' in href.lower() or 'rimless' in href.lower():
+                if not glasses_info['frame_type']:
+                    glasses_info['frame_type'] = link_text
 
     def parse_specs_from_page_text(self, soup, glasses_info):
         """Parse specs from the entire page text using Americas Best pattern"""
@@ -415,8 +515,8 @@ class AmericasBestScraper:
         
         # SKU mapping
         elif any(sku_key in key for sku_key in ['sku', 'model', 'product id', 'item number', 'model number', 'style number']):
-            if not glasses_info['sku']:
-                glasses_info['sku'] = value
+            if not glasses_info['FrameID']:
+                glasses_info['FrameID'] = value
 
     def scrape_all_glasses(self):
         """Main method to scrape all glasses information"""
@@ -504,6 +604,7 @@ def main():
         scraper.save_to_csv()
         
         print(f"Successfully scraped {len(glasses_data)} glasses")
+        print(f"Images saved to: {scraper.frames_dir}")
         
     except KeyboardInterrupt:
         print("\nScraping interrupted by user")
@@ -511,6 +612,6 @@ def main():
         print(f"An error occurred: {e}")
 
 if __name__ == "__main__":
-    # Required packages: requests, beautifulsoup4, lxml
-    # Install with: pip install requests beautifulsoup4 lxml
+    # Required packages: requests, beautifulsoup4, lxml, Pillow
+    # Install with: pip install requests beautifulsoup4 lxml Pillow
     main()
